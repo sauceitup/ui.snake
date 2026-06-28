@@ -2,7 +2,11 @@
 
 An interactive ribbon of Spotify tracks: a list of cards that gently snakes, fans out under a pinch gesture, and scrolls with one finger. Plain JS + Canvas, no frameworks, no backend — just a static HTML file on GitHub Pages.
 
-**[→ View demo](#)** *(add your link here after publishing)*
+**[→ View demo](#)** 
+
+https://github.com/user-attachments/assets/6117d97a-e013-4baf-9873-5cda0a6aaf26
+
+**
 
 ![preview](#) *(you can add a screenshot or GIF here)*
 
