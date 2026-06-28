@@ -8,7 +8,7 @@ https://github.com/user-attachments/assets/6117d97a-e013-4baf-9873-5cda0a6aaf26
 
 **
 
-![preview](#) *(you can add a screenshot or GIF here)*
+
 
 ## What's inside
 
