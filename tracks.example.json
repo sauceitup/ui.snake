@@ -1,0 +1,20 @@
+[
+  {
+    "title": "Example Song One",
+    "artist": "Example Artist",
+    "coverUrl": "https://i.scdn.co/image/ab67616d00001e0229975ac87ddb2cc8b225f383",
+    "trackUrl": "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC"
+  },
+  {
+    "title": "Example Song Two",
+    "artist": "Another Artist",
+    "coverUrl": "https://i.scdn.co/image/ab67616d00001e023cd4b060bb01f387f4f4c3fe",
+    "trackUrl": "https://open.spotify.com/track/2takcwOaAZWiXQijPHIx7B"
+  },
+  {
+    "title": "Example Song Three",
+    "artist": "Third Artist, Featured Artist",
+    "coverUrl": "https://i.scdn.co/image/ab67616d00001e02806c160566580d6335d1f16c",
+    "trackUrl": "https://open.spotify.com/track/0VjIjW4GlUZAMYd2vXMi3b"
+  }
+]

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Экспорт треков Spotify</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; min-height: 100%;
+    background: #0b0b0d; color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 24px; box-sizing: border-box;
+  }
+  h1 { font-size: 18px; margin-bottom: 8px; }
+  p { color: rgba(255,255,255,0.55); font-size: 14px; max-width: 320px; line-height: 1.5; }
+  button {
+    margin-top: 20px;
+    font-size: 16px; font-weight: 600; color: #0b0b0d;
+    background: #1DB954; border: none; border-radius: 24px;
+    padding: 14px 28px; -webkit-tap-highlight-color: transparent;
+  }
+  #status { margin-top: 16px; font-size: 13px; color: rgba(255,255,255,0.6); min-height: 20px; }
+  #downloadLink {
+    display: none; margin-top: 16px; color: #1DB954; font-size: 15px; font-weight: 600;
+    text-decoration: underline;
+  }
+</style>
+</head>
+<body>
+  <h1>Экспорт лайкнутых треков</h1>
+  <p>Эта страница только для тебя — она один раз заберёт твои лайкнутые треки из Spotify и сохранит их в файл <code>tracks.json</code>, который потом нужно положить в репозиторий рядом с index.html. Остальные посетители сайта этот логин не видят и не используют.</p>
+  <button id="loginBtn">Войти и экспортировать</button>
+  <div id="status"></div>
+  <a id="downloadLink" href="#" download="tracks.json">⬇ Скачать tracks.json</a>
+
+<script>
+(function(){
+  // Тот же Client ID и тот же подход PKCE, что и в index.html — но используется
+  // только тобой, один раз, для генерации статичного файла.
+  const SPOTIFY_CLIENT_ID = '7ab2a7398a4d4db98978eac96aa4612c';
+  // ВАЖНО: redirect URI должен быть страницей ЭКСПОРТА (этой), а не index.html —
+  // её тоже нужно отдельно добавить в Spotify Dashboard → Redirect URIs.
+  const SPOTIFY_REDIRECT_URI = window.location.origin + window.location.pathname;
+  const SPOTIFY_SCOPES = 'user-library-read';
+
+  const statusEl = document.getElementById('status');
+  const loginBtn = document.getElementById('loginBtn');
+  const downloadLink = document.getElementById('downloadLink');
+
+  function setStatus(t){ statusEl.textContent = t; }
+
+  function base64UrlEncode(buffer){
+    return btoa(String.fromCharCode(...new Uint8Array(buffer)))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function generateRandomString(length){
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    const randomValues = crypto.getRandomValues(new Uint8Array(length));
+    for (let i = 0; i < length; i++) result += chars[randomValues[i] % chars.length];
+    return result;
+  }
+  async function sha256(plain){
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(plain));
+  }
+
+  async function redirectToSpotifyAuth(){
+    const codeVerifier = generateRandomString(64);
+    sessionStorage.setItem('sp_export_code_verifier', codeVerifier);
+    const hashed = await sha256(codeVerifier);
+    const codeChallenge = base64UrlEncode(hashed);
+    const params = new URLSearchParams({
+      client_id: SPOTIFY_CLIENT_ID,
+      response_type: 'code',
+      redirect_uri: SPOTIFY_REDIRECT_URI,
+      scope: SPOTIFY_SCOPES,
+      code_challenge_method: 'S256',
+      code_challenge: codeChallenge
+    });
+    window.location.href = 'https://accounts.spotify.com/authorize?' + params.toString();
+  }
+
+  async function exchangeCodeForToken(code){
+    const codeVerifier = sessionStorage.getItem('sp_export_code_verifier');
+    const body = new URLSearchParams({
+      client_id: SPOTIFY_CLIENT_ID,
+      grant_type: 'authorization_code',
+      code: code,
+      redirect_uri: SPOTIFY_REDIRECT_URI,
+      code_verifier: codeVerifier
+    });
+    const resp = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    });
+    if (!resp.ok) throw new Error('Token exchange failed: ' + resp.status);
+    return resp.json();
+  }
+
+  async function fetchAllLikedTracks(accessToken, onProgress){
+    const limit = 50;
+    let offset = 0;
+    let total = Infinity;
+    const all = [];
+    while (offset < total) {
+      const resp = await fetch(
+        `https://api.spotify.com/v1/me/tracks?limit=${limit}&offset=${offset}`,
+        { headers: { Authorization: 'Bearer ' + accessToken } }
+      );
+      if (!resp.ok) throw new Error('Spotify API error: ' + resp.status);
+      const data = await resp.json();
+      total = data.total;
+      for (const item of data.items) {
+        const t = item.track;
+        if (!t) continue;
+        all.push({
+          title: t.name,
+          artist: (t.artists || []).map(a => a.name).join(', '),
+          coverUrl: (t.album && t.album.images && t.album.images.length)
+            ? t.album.images[Math.min(1, t.album.images.length - 1)].url
+            : null,
+          trackUrl: (t.external_urls && t.external_urls.spotify) || null
+        });
+      }
+      offset += limit;
+      if (onProgress) onProgress(all.length, total);
+      if (data.items.length === 0) break;
+    }
+    return all;
+  }
+
+  async function run(){
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const errorParam = urlParams.get('error');
+
+    if (errorParam) { setStatus('Доступ не предоставлен.'); return; }
+
+    if (!code) return; // ждём нажатия кнопки
+
+    window.history.replaceState({}, document.title, window.location.pathname);
+    setStatus('Авторизация...');
+    let tokenData;
+    try {
+      tokenData = await exchangeCodeForToken(code);
+    } catch (e) {
+      setStatus('Ошибка авторизации: ' + e.message);
+      return;
+    }
+
+    setStatus('Загружаю треки...');
+    try {
+      const tracks = await fetchAllLikedTracks(tokenData.access_token, (loaded, total) => {
+        setStatus(`Загружено ${loaded} из ${total}...`);
+      });
+      setStatus(`Готово! Загружено ${tracks.length} треков.`);
+
+      const json = JSON.stringify(tracks, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      downloadLink.href = url;
+      downloadLink.style.display = 'inline-block';
+      loginBtn.style.display = 'none';
+    } catch (e) {
+      setStatus('Ошибка загрузки треков: ' + e.message);
+    }
+  }
+
+  loginBtn.addEventListener('click', () => {
+    setStatus('Перенаправляю на Spotify...');
+    redirectToSpotifyAuth();
+  });
+
+  run();
+})();
+</script>
+</body>
+</html>
